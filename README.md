@@ -29,7 +29,31 @@ non-JSON requests return 415; payloads over 64 KiB return 413.
 `GET /health` returns `{"status":"ok"}`. There is no public data retrieval route.
 Every accepted POST creates a new row, including retries of the same payload.
 
-## PythonAnywhere deployment
+## Railway deployment from GitHub
+
+1. In Railway, choose **New Project → Deploy from GitHub repo** and select
+   `alxLenno/tracker`. Allow Railway access to this private repository if prompted.
+2. Attach a volume to the service with mount path `/data` so SQLite readings
+   survive deployments. Keep this service at one replica.
+3. Set these service variables before deploying:
+
+   - `TRACKER_API_KEY`: a long random secret, generated locally with
+     `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`.
+   - `TRACKER_DATABASE`: `/data/tracker.db`.
+
+4. Deploy the service. `railway.json` sets the Gunicorn start command and the
+   `/health` deployment health check. Gunicorn binds to Railway's `PORT`.
+5. Under the service's **Settings → Networking**, generate a public domain.
+   Verify `https://YOUR_DOMAIN/health`, then send readings to
+   `https://YOUR_DOMAIN/api/tracker` using the curl example above with your key.
+
+The volume is required for persistent SQLite storage; the default container
+filesystem is temporary. Do not commit the API key to GitHub.
+
+Official guides: https://railway.com/guides/flask and
+https://docs.railway.com/volumes
+
+## PythonAnywhere deployment (alternative)
 
 1. Upload `app.py` and `requirements.txt` into `/home/YOURUSERNAME/tracker`.
 2. In a Bash console, create a virtual environment and install dependencies:
