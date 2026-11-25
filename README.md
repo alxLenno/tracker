@@ -1,0 +1,75 @@
+# Tracker receiver
+
+Receives JSON over HTTP POST and stores the complete payload with a server UTC
+timestamp in SQLite. Payload fields are intentionally unrestricted until the
+tracker protocol is known. This receiver does not implement raw TCP/UDP protocols.
+
+## Local use
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export TRACKER_API_KEY='replace-with-a-long-random-secret'
+flask --app 'app:create_app()' run
+```
+
+Send a reading (replace the sample fields with your tracker's data):
+
+```sh
+curl -X POST http://127.0.0.1:5000/api/tracker \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: replace-with-a-long-random-secret' \
+  -d '{"device_id":"tracker-001","latitude":-1.2864,"longitude":36.8172,"battery":85}'
+```
+
+Successful requests return HTTP 201 with `status`, the stored row `id`, and
+`received_at`. Missing/incorrect keys return 401; invalid JSON objects return 400;
+non-JSON requests return 415; payloads over 64 KiB return 413.
+`GET /health` returns `{"status":"ok"}`. There is no public data retrieval route.
+Every accepted POST creates a new row, including retries of the same payload.
+
+## PythonAnywhere deployment
+
+1. Upload `app.py` and `requirements.txt` into `/home/YOURUSERNAME/tracker`.
+2. In a Bash console, create a virtual environment and install dependencies:
+
+   ```sh
+   cd ~/tracker
+   python3 -m venv .venv
+   .venv/bin/pip install -r requirements.txt
+   python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+   ```
+
+3. Under **Web**, add a web app with **Manual configuration**. Choose the same
+   Python version as the virtual environment. Set its virtualenv path to
+   `/home/YOURUSERNAME/tracker/.venv`.
+4. Replace the Web tab's WSGI configuration file with the following. Substitute
+   your username and the generated secret. Keep the secret private.
+
+   ```python
+   import os
+   import sys
+
+   sys.path.insert(0, '/home/YOURUSERNAME/tracker')
+   os.environ['TRACKER_API_KEY'] = 'YOUR_GENERATED_SECRET'
+   os.environ['TRACKER_DATABASE'] = '/home/YOURUSERNAME/tracker/tracker.db'
+
+   from app import create_app
+   application = create_app()
+   ```
+
+5. Reload the web app. Configure the tracker to POST JSON to
+   `https://YOURUSERNAME.pythonanywhere.com/api/tracker`, with `Content-Type:
+   application/json` and `X-API-Key: YOUR_GENERATED_SECRET` headers. Use the actual
+   domain shown on your Web tab if it differs.
+6. Test using the curl example, replacing the local URL and API key. Check
+   `/health` and the Web tab's error log if deployment fails.
+
+PythonAnywhere serves the application through WSGI; do not call `app.run()` in
+the deployed module. Official setup guide:
+https://help.pythonanywhere.com/pages/Flask/
+
+Data is stored in `tracker.db`; back it up and monitor disk usage as readings
+accumulate. Before connecting a physical tracker, verify its HTTP support,
+payload format, custom-header support, and required acknowledgement response.
